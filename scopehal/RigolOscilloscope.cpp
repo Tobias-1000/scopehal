@@ -48,7 +48,24 @@ RigolOscilloscope::RigolOscilloscope(SCPITransport* transport)
 	, m_triggerOneShot(false)
 {
 	//Last digit of the model number is the number of channels
-	if(1 != sscanf(m_model.c_str(), "DS%d", &m_modelNumber))
+
+	LogDebug("connecting to %s\n", m_model.c_str());
+
+	// DS2000A / MSO2000A
+	if((1 == sscanf(m_model.c_str(), "DS%dA", &m_modelNumber))
+	|| (1 == sscanf(m_model.c_str(), "MSO%dA", &m_modelNumber)))
+	{
+		LogDebug("found DS/MSO %d\n", m_modelNumber);
+		if ((m_modelNumber / 1000) == 2)
+		{
+			m_protocol = DS;
+		}
+		else
+		{
+			LogError("Bad model number %d\n", m_modelNumber);
+		}
+	}
+	else if(1 != sscanf(m_model.c_str(), "DS%d", &m_modelNumber))
 	{
 		if(1 != sscanf(m_model.c_str(), "MSO%d", &m_modelNumber))
 		{
