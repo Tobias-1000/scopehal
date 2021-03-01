@@ -58,7 +58,7 @@ RigolOscilloscope::RigolOscilloscope(SCPITransport* transport)
 		LogDebug("found DS/MSO %d\n", m_modelNumber);
 		if ((m_modelNumber / 1000) == 2)
 		{
-			m_protocol = DS;
+			m_protocol = DS2000A;
 		}
 		else
 		{
@@ -90,6 +90,11 @@ RigolOscilloscope::RigolOscilloscope(SCPITransport* transport)
 
 	int nchans = m_modelNumber % 10;
 	m_bandwidth = m_modelNumber % 1000 - nchans;
+	
+	LogDebug("nchans %d\n", nchans);
+	LogDebug("m_bandwidth %d\n", m_bandwidth);
+
+
 	for(int i = 0; i < nchans; i++)
 	{
 		//Hardware name of the channel
@@ -144,7 +149,7 @@ RigolOscilloscope::RigolOscilloscope(SCPITransport* transport)
 		for(size_t i = 0; i < m_analogChannelCount; i++)
 			m_transport->SendCommand(":" + m_channels[i]->GetHwname() + ":VERN ON");
 	}
-	if(m_protocol == MSO5 || m_protocol == DS)
+	if(m_protocol == MSO5 || m_protocol == DS || m_protocol == DS2000A)
 		m_transport->SendCommand(":TIM:VERN ON");
 	FlushConfigCache();
 }
@@ -252,6 +257,8 @@ OscilloscopeChannel::CouplingType RigolOscilloscope::GetChannelCoupling(size_t i
 	else /* if(reply == "GND") */
 		m_channelCouplings[i] = OscilloscopeChannel::COUPLE_GND;
 	return m_channelCouplings[i];
+
+	// FIXME use ":CHANx:IMP" for 50R input impedance if available
 }
 
 void RigolOscilloscope::SetChannelCoupling(size_t i, OscilloscopeChannel::CouplingType type)
@@ -457,6 +464,7 @@ void RigolOscilloscope::SetChannelBandwidthLimit(size_t i, unsigned int limit_mh
 				else
 					m_transport->SendCommand(m_channels[i]->GetHwname() + ":BWL OFF");
 				break;
+			case 300:
 			case 350:
 				if((limit_mhz <= 20) & (limit_mhz != 0))
 					m_transport->SendCommand(m_channels[i]->GetHwname() + ":BWL 20M");
@@ -498,6 +506,7 @@ void RigolOscilloscope::SetChannelBandwidthLimit(size_t i, unsigned int limit_mh
 
 double RigolOscilloscope::GetChannelVoltageRange(size_t i)
 {
+	// TODO check value DS2000A
 	{
 		lock_guard<recursive_mutex> lock(m_cacheMutex);
 		if(m_channelVoltageRanges.find(i) != m_channelVoltageRanges.end())
@@ -510,6 +519,8 @@ double RigolOscilloscope::GetChannelVoltageRange(size_t i)
 		m_transport->SendCommand(":" + m_channels[i]->GetHwname() + ":RANGE?");
 	else if(m_protocol == MSO5 || m_protocol == DS_OLD)
 		m_transport->SendCommand(":" + m_channels[i]->GetHwname() + ":SCALE?");
+	else if(m_protocol == DS2000A)
+		m_transport->SendCommand(":" + m_channels[i]->GetHwname() + ":SCAL?");
 
 	string reply = m_transport->ReadReply();
 	double range;
@@ -526,6 +537,7 @@ double RigolOscilloscope::GetChannelVoltageRange(size_t i)
 
 void RigolOscilloscope::SetChannelVoltageRange(size_t i, double range)
 {
+	// TODO check value DS2000A
 	{
 		lock_guard<recursive_mutex> lock2(m_cacheMutex);
 		m_channelVoltageRanges[i] = range;
@@ -538,6 +550,8 @@ void RigolOscilloscope::SetChannelVoltageRange(size_t i, double range)
 		snprintf(buf, sizeof(buf), ":%s:RANGE %f", m_channels[i]->GetHwname().c_str(), range);
 	else if(m_protocol == MSO5 || m_protocol == DS_OLD)
 		snprintf(buf, sizeof(buf), ":%s:SCALE %f", m_channels[i]->GetHwname().c_str(), range / 8);
+	else if(m_protocol == DS2000A)
+		snprintf(buf, sizeof(buf), ":%s:SCAL %f", m_channels[i]->GetHwname().c_str(), range);
 	m_transport->SendCommand(buf);
 
 	//FIXME
@@ -636,7 +650,7 @@ bool RigolOscilloscope::AcquireData()
 	double yorigin;
 	double yreference;
 	size_t maxpoints = 250 * 1000;
-	if(m_protocol == DS)
+	if(m_protocol == DS || m_protocol == DS2000A)
 		maxpoints = 250 * 1000;
 	else if(m_protocol == DS_OLD)
 		maxpoints = 8192; // FIXME
@@ -803,6 +817,8 @@ bool RigolOscilloscope::AcquireData()
 	//TODO: support digital channels
 
 	//Re-arm the trigger if not in one-shot mode
+	
+	// TODO check DS2000A
 	if(!m_triggerOneShot)
 	{
 		if (m_protocol == DS_OLD)
@@ -826,6 +842,7 @@ bool RigolOscilloscope::AcquireData()
 
 void RigolOscilloscope::Start()
 {
+	// TODO check DS2000A
 	//LogDebug("Start single trigger\n");
 	lock_guard<recursive_mutex> lock(m_mutex);
 	if (m_protocol == DS_OLD)
@@ -844,6 +861,7 @@ void RigolOscilloscope::Start()
 
 void RigolOscilloscope::StartSingleTrigger()
 {
+	// TODO check DS2000A
 	lock_guard<recursive_mutex> lock(m_mutex);
 	if (m_protocol == DS_OLD)
 	{
