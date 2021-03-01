@@ -526,7 +526,8 @@ double RigolOscilloscope::GetChannelVoltageRange(size_t i)
 	double range;
 	sscanf(reply.c_str(), "%lf", &range);
 	lock_guard<recursive_mutex> lock(m_cacheMutex);
-	if(m_protocol == MSO5)
+	// the command value is V/Div, the function needs to return V/Screen
+	if(m_protocol == MSO5 || m_protocol == DS2000A)
 		range = 8 * range;
 	if(m_protocol == DS_OLD)
 		range = 10 * range;
@@ -546,12 +547,13 @@ void RigolOscilloscope::SetChannelVoltageRange(size_t i, double range)
 	lock_guard<recursive_mutex> lock(m_mutex);
 	char buf[128];
 
+	// the command value is V/Div, the function needs to return V/Screen
 	if(m_protocol == DS)
 		snprintf(buf, sizeof(buf), ":%s:RANGE %f", m_channels[i]->GetHwname().c_str(), range);
 	else if(m_protocol == MSO5 || m_protocol == DS_OLD)
 		snprintf(buf, sizeof(buf), ":%s:SCALE %f", m_channels[i]->GetHwname().c_str(), range / 8);
 	else if(m_protocol == DS2000A)
-		snprintf(buf, sizeof(buf), ":%s:SCAL %f", m_channels[i]->GetHwname().c_str(), range);
+		snprintf(buf, sizeof(buf), ":%s:SCAL %f", m_channels[i]->GetHwname().c_str(), range / 8);
 	m_transport->SendCommand(buf);
 
 	//FIXME
